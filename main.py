@@ -17,7 +17,7 @@ session_name = 'alanmmd'
 MAIN_USER_ID = 5045853109
 GROUP_PHOTO_PATH = 'group.jpeg'
 
-# --- Cleanup old session files ---
+# --- Cleanup old session files before anything else ---
 for file in os.listdir():
     if file.startswith(session_name) and file.endswith(('.session', '.session-journal', '.session-wal', '.session-shm')):
         os.remove(file)
@@ -122,8 +122,9 @@ async def delete_group(event):
         print(f"[DELETE ERROR] {e}")
 
 async def main():
+    await client.connect()
     if not await client.is_user_authorized():
-        phone = input("📱 Enter your phone number: ")
+        phone = input("📱 Enter your phone number (with country code): ")
         await client.send_code_request(phone)
         code = input("💬 Enter the code you received: ")
         try:
@@ -133,6 +134,6 @@ async def main():
             return
     print("✅ Bot is running. Waiting for .mm or .del...")
 
-with client:
-    client.loop.run_until_complete(main())
-    client.run_until_disconnected()
+    await client.run_until_disconnected()
+
+client.loop.run_until_complete(main())
