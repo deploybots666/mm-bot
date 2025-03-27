@@ -1,4 +1,7 @@
+import os
+import asyncio
 from telethon import TelegramClient, events, functions, types
+from telethon.sessions import StringSession
 from telethon.tl.functions.channels import (
     CreateChannelRequest,
     EditPhotoRequest,
@@ -6,43 +9,40 @@ from telethon.tl.functions.channels import (
 )
 from telethon.tl.functions.messages import ExportChatInviteRequest, EditChatAboutRequest
 from telethon.tl.types import ChatAdminRights, InputChatUploadedPhoto
-import asyncio
 
-# --- Your ALT account credentials ---
+# --- ALT account credentials ---
 api_id = 26532035
 api_hash = 'f43d15238cf4775858955b03d5b74387'
 session_name = 'alanmmd'
-
-# --- Main admin user ID ---
 MAIN_USER_ID = 5045853109
-GROUP_PHOTO_PATH = 'group.jpeg'  # Make sure this file exists in Replit or Koyeb environment
+GROUP_PHOTO_PATH = 'group.jpeg'
 
+# --- Cleanup old session files ---
+for file in os.listdir():
+    if file.startswith(session_name) and file.endswith(('.session', '.session-journal', '.session-wal', '.session-shm')):
+        os.remove(file)
+        print(f"Deleted old session file: {file}")
+
+# --- Start client ---
 client = TelegramClient(session_name, api_id, api_hash)
 
 @client.on(events.NewMessage(from_users=MAIN_USER_ID, pattern=r'^\.mm$'))
 async def create_group(event):
-    print("Received .mm command")  # Log to confirm command is received
-
+    print("Received .mm command")
     try:
-        # Step 1: Create the megagroup
         result = await client(CreateChannelRequest(
             title="MM Group",
             about="",
             megagroup=True
         ))
-
         group = result.chats[0]
         chat = await client.get_input_entity(group.id)
 
-        # Step 2: Upload group photo with retries
         for attempt in range(6):
             try:
                 uploaded_photo = await client.upload_file(GROUP_PHOTO_PATH)
                 photo = InputChatUploadedPhoto(uploaded_photo)
-                await client(EditPhotoRequest(
-                    channel=chat,
-                    photo=photo
-                ))
+                await client(EditPhotoRequest(channel=chat, photo=photo))
                 break
             except Exception as e:
                 print(f"Telegram is having internal issues {e}")
@@ -50,13 +50,11 @@ async def create_group(event):
                 if attempt == 5:
                     print("[Photo Error] Request was unsuccessful 6 time(s)")
 
-        # Step 3: Set group bio
         await client(EditChatAboutRequest(
             peer=chat,
             about="Always make sure that you’re dealing via @alans, not an impersonator"
         ))
 
-        # Step 4: Promote main user to admin with title
         await client(EditAdminRequest(
             channel=chat,
             user_id=MAIN_USER_ID,
@@ -76,7 +74,6 @@ async def create_group(event):
             rank="Middleman"
         ))
 
-        # Step 5: Send instruction message
         msg = await client.send_message(group.id,
             "**Hey. Please state the terms of the deal:**\n\n"
             "• What is the deal?\n"
@@ -85,16 +82,12 @@ async def create_group(event):
             "• Include any other relevant information."
         )
 
-        # Try to pin with flood wait handling
         try:
             await msg.pin()
         except Exception as e:
             print(f"[PIN ERROR] {e}")
 
-        # Step 6: Create invite link
         invite = await client(ExportChatInviteRequest(peer=chat))
-
-        # Step 7: Respond with invite link
         await event.respond(f"Share this invite with the other party:\n{invite.link}")
 
     except Exception as e:
@@ -105,7 +98,6 @@ async def create_group(event):
 async def delete_group(event):
     try:
         chat = await event.get_chat()
-
         await event.delete()
 
         await client.send_message(chat.id,
@@ -120,7 +112,7 @@ async def delete_group(event):
             )
         ))
 
-        await asyncio.sleep(1800)  # 30 minutes
+        await asyncio.sleep(1800)
         await client(functions.messages.DeleteChatUserRequest(
             chat_id=chat.id,
             user_id='me'
@@ -129,6 +121,18 @@ async def delete_group(event):
     except Exception as e:
         print(f"[DELETE ERROR] {e}")
 
-print("✅ Bot is running. Waiting for .mm or .del...")
-client.start()
-client.run_until_disconnected()
+async def main():
+    if not await client.is_user_authorized():
+        phone = input("📱 Enter your phone number: ")
+        await client.send_code_request(phone)
+        code = input("💬 Enter the code you received: ")
+        try:
+            await client.sign_in(phone, code)
+        except Exception as e:
+            print(f"❌ Login failed: {e}")
+            return
+    print("✅ Bot is running. Waiting for .mm or .del...")
+
+with client:
+    client.loop.run_until_complete(main())
+    client.run_until_disconnected()
