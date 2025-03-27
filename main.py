@@ -1,12 +1,7 @@
 import os
 import asyncio
 from telethon import TelegramClient, events, functions, types
-from telethon.sessions import StringSession
-from telethon.tl.functions.channels import (
-    CreateChannelRequest,
-    EditPhotoRequest,
-    EditAdminRequest
-)
+from telethon.tl.functions.channels import CreateChannelRequest, EditPhotoRequest, EditAdminRequest
 from telethon.tl.functions.messages import ExportChatInviteRequest, EditChatAboutRequest
 from telethon.tl.types import ChatAdminRights, InputChatUploadedPhoto
 
@@ -17,13 +12,13 @@ session_name = 'alanmmd'
 MAIN_USER_ID = 5045853109
 GROUP_PHOTO_PATH = 'group.jpeg'
 
-# --- Cleanup old session files before anything else ---
-for file in os.listdir():
-    if file.startswith(session_name) and file.endswith(('.session', '.session-journal', '.session-wal', '.session-shm')):
-        os.remove(file)
-        print(f"Deleted old session file: {file}")
+# --- Delete old session files BEFORE anything else ---
+for f in os.listdir():
+    if f.startswith(session_name) and f.endswith(('.session', '.session-journal', '.session-wal', '.session-shm')):
+        os.remove(f)
+        print(f"🗑️ Deleted old session file: {f}")
 
-# --- Start client ---
+# --- Initialize Telegram client ---
 client = TelegramClient(session_name, api_id, api_hash)
 
 @client.on(events.NewMessage(from_users=MAIN_USER_ID, pattern=r'^\.mm$'))
@@ -45,10 +40,8 @@ async def create_group(event):
                 await client(EditPhotoRequest(channel=chat, photo=photo))
                 break
             except Exception as e:
-                print(f"Telegram is having internal issues {e}")
+                print(f"Telegram issue: {e}")
                 await asyncio.sleep(5)
-                if attempt == 5:
-                    print("[Photo Error] Request was unsuccessful 6 time(s)")
 
         await client(EditChatAboutRequest(
             peer=chat,
@@ -59,17 +52,10 @@ async def create_group(event):
             channel=chat,
             user_id=MAIN_USER_ID,
             admin_rights=ChatAdminRights(
-                change_info=True,
-                post_messages=True,
-                edit_messages=True,
-                delete_messages=True,
-                ban_users=True,
-                invite_users=True,
-                pin_messages=True,
-                add_admins=True,
-                manage_call=True,
-                other=True,
-                anonymous=False
+                change_info=True, post_messages=True, edit_messages=True,
+                delete_messages=True, ban_users=True, invite_users=True,
+                pin_messages=True, add_admins=True, manage_call=True,
+                other=True, anonymous=False
             ),
             rank="Middleman"
         ))
@@ -99,28 +85,17 @@ async def delete_group(event):
     try:
         chat = await event.get_chat()
         await event.delete()
-
-        await client.send_message(chat.id,
-            "⚠️ This group will be deleted in 30 minutes. Please save anything important."
-        )
-
+        await client.send_message(chat.id, "⚠️ This group will be deleted in 30 minutes. Please save anything important.")
         await client(functions.messages.EditChatDefaultBannedRightsRequest(
             peer=chat.id,
-            banned_rights=types.ChatBannedRights(
-                until_date=None,
-                send_messages=True
-            )
+            banned_rights=types.ChatBannedRights(until_date=None, send_messages=True)
         ))
-
         await asyncio.sleep(1800)
-        await client(functions.messages.DeleteChatUserRequest(
-            chat_id=chat.id,
-            user_id='me'
-        ))
-
+        await client(functions.messages.DeleteChatUserRequest(chat_id=chat.id, user_id='me'))
     except Exception as e:
         print(f"[DELETE ERROR] {e}")
 
+# --- Login + Run ---
 async def main():
     await client.connect()
     if not await client.is_user_authorized():
@@ -133,7 +108,6 @@ async def main():
             print(f"❌ Login failed: {e}")
             return
     print("✅ Bot is running. Waiting for .mm or .del...")
-
     await client.run_until_disconnected()
 
 client.loop.run_until_complete(main())
